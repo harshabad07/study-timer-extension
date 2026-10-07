@@ -1,66 +1,84 @@
 /**
- * Study Timer Extension - popup.js
+ * Study Timer - Pomodoro Productivity Extension
  * 
- * Manages the Pomodoro timer logic, user interface updates, session state persistence
- * via chrome.storage.local, Web Audio API sound feedback, and session mode switching.
+ * Master Logic Script (popup.js)
+ * Implements Pomodoro timer countdown engine, state persistence using chrome.storage.local,
+ * session counter tracking, input validation, Web Audio chime synthesis, and Chrome desktop notifications.
  */
 
 // Default Configuration Constants
-const DEFAULT_STUDY_MINUTES = 25;
-const DEFAULT_BREAK_MINUTES = 5;
+const DEFAULTS = {
+  STUDY_MINUTES: 25,
+  BREAK_MINUTES: 5,
+  COMPLETED_SESSIONS: 0,
+  MODE: 'study'
+};
 
-// DOM Elements
+// DOM Element References
 const timerDisplay = document.getElementById('timerDisplay');
 const modeBadge = document.getElementById('modeBadge');
+const sessionCount = document.getElementById('sessionCount');
 const startBtn = document.getElementById('startBtn');
 const pauseBtn = document.getElementById('pauseBtn');
 const resetBtn = document.getElementById('resetBtn');
 const studyInput = document.getElementById('studyInput');
 const breakInput = document.getElementById('breakInput');
 const saveSettingsBtn = document.getElementById('saveSettingsBtn');
-const saveStatus = document.getElementById('saveStatus');
+const resetCountBtn = document.getElementById('resetCountBtn');
+const statusMsg = document.getElementById('statusMsg');
 
 // State Variables
 let timerInterval = null;
-let currentMode = 'study'; // 'study' or 'break'
-let studyDuration = DEFAULT_STUDY_MINUTES;
-let breakDuration = DEFAULT_BREAK_MINUTES;
-let timeLeftSeconds = DEFAULT_STUDY_MINUTES * 60;
+let currentMode = DEFAULTS.MODE; // 'study' or 'break'
+let studyDuration = DEFAULTS.STUDY_MINUTES;
+let breakDuration = DEFAULTS.BREAK_MINUTES;
+let completedSessions = DEFAULTS.COMPLETED_SESSIONS;
+let timeLeftSeconds = DEFAULTS.STUDY_MINUTES * 60;
 let isRunning = false;
 let timerEndTime = null;
 
-// Initialize Extension Popup
+// Initialize Popup when DOM is fully loaded
 document.addEventListener('DOMContentLoaded', () => {
-  initializeState();
+  initializeExtensionState();
   setupEventListeners();
 });
 
 /**
- * Initialize state from chrome.storage.local or set defaults
+ * Load state from chrome.storage.local or initialize with defaults
  */
-function initializeState() {
+function initializeExtensionState() {
   chrome.storage.local.get(
-    ['studyDuration', 'breakDuration', 'currentMode', 'timeLeftSeconds', 'isRunning', 'timerEndTime'],
+    [
+      'studyDuration',
+      'breakDuration',
+      'completedSessions',
+      'currentMode',
+      'timeLeftSeconds',
+      'isRunning',
+      'timerEndTime'
+    ],
     (result) => {
-      if (result.studyDuration) studyDuration = parseInt(result.studyDuration, 10);
-      if (result.breakDuration) breakDuration = parseInt(result.breakDuration, 10);
-      if (result.currentMode) currentMode = result.currentMode;
-      
-      // Update Settings Inputs
+      if (result.studyDuration !== undefined) studyDuration = parseInt(result.studyDuration, 10);
+      if (result.breakDuration !== undefined) breakDuration = parseInt(result.breakDuration, 10);
+      if (result.completedSessions !== undefined) completedSessions = parseInt(result.completedSessions, 10);
+      if (result.currentMode !== undefined) currentMode = result.currentMode;
+
+      // Populate input settings fields
       studyInput.value = studyDuration;
       breakInput.value = breakDuration;
+      sessionCount.textContent = completedSessions;
 
-      // Handle Running State across popup close/open
+      // Evaluate active running state across popup closes
       if (result.isRunning && result.timerEndTime) {
         const remaining = Math.round((result.timerEndTime - Date.now()) / 1000);
         if (remaining > 0) {
           timeLeftSeconds = remaining;
           isRunning = true;
           timerEndTime = result.timerEndTime;
-          startTimerInterval();
+          startTimerCountdown();
         } else {
-          // Timer finished while popup was closed
-          handleSessionCompletion();
+          // Timer completed while popup window was closed
+          handleTimerCompletion();
         }
       } else {
         if (result.timeLeftSeconds !== undefined) {
@@ -71,143 +89,173 @@ function initializeState() {
         isRunning = false;
       }
 
-      updateUI();
+      updateFullUI();
     }
   );
 }
 
 /**
- * Set up event listeners for buttons and user actions
+ * Attach UI event listeners
  */
 function setupEventListeners() {
   startBtn.addEventListener('click', handleStart);
   pauseBtn.addEventListener('click', handlePause);
   resetBtn.addEventListener('click', handleReset);
   saveSettingsBtn.addEventListener('click', handleSaveSettings);
+  resetCountBtn.addEventListener('click', handleResetSessionCount);
 }
 
 /**
- * Handle Start Button Click
+ * Start or Resume Timer Countdown
  */
 function handleStart() {
-  if (isRunning) return;
+  if (isRunning) return; // Prevent multiple overlapping intervals
+
   isRunning = true;
   timerEndTime = Date.now() + (timeLeftSeconds * 1000);
-  
-  saveState();
-  startTimerInterval();
-  updateButtonStates();
+
+  saveStateToStorage();
+  startTimerCountdown();
+  updateButtonControls();
 }
 
 /**
- * Start JavaScript interval to tick down every second
+ * Executes 1-second interval ticking
  */
-function startTimerInterval() {
+function startTimerCountdown() {
   clearInterval(timerInterval);
   timerInterval = setInterval(() => {
     const remaining = Math.round((timerEndTime - Date.now()) / 1000);
-    
+
     if (remaining <= 0) {
       clearInterval(timerInterval);
       timeLeftSeconds = 0;
-      updateDisplay(0);
-      handleSessionCompletion();
+      updateTimerDisplay(0);
+      handleTimerCompletion();
     } else {
       timeLeftSeconds = remaining;
-      updateDisplay(timeLeftSeconds);
+      updateTimerDisplay(timeLeftSeconds);
     }
   }, 1000);
 }
 
 /**
- * Handle Pause Button Click
+ * Pause active timer and preserve remaining time
  */
 function handlePause() {
   if (!isRunning) return;
+
   isRunning = false;
   clearInterval(timerInterval);
   timerEndTime = null;
-  
-  saveState();
-  updateButtonStates();
+
+  saveStateToStorage();
+  updateButtonControls();
 }
 
 /**
- * Handle Reset Button Click
+ * Reset timer for current mode to configured duration
  */
 function handleReset() {
   isRunning = false;
   clearInterval(timerInterval);
   timerEndTime = null;
-  
-  // Reset time to selected mode duration
-  const minutes = currentMode === 'study' ? studyDuration : breakDuration;
-  timeLeftSeconds = minutes * 60;
 
-  saveState();
-  updateUI();
+  const targetMinutes = currentMode === 'study' ? studyDuration : breakDuration;
+  timeLeftSeconds = targetMinutes * 60;
+
+  saveStateToStorage();
+  updateFullUI();
 }
 
 /**
- * Handle switching modes when timer hits zero
+ * Handle automatic session completion and switching logic
  */
-function handleSessionCompletion() {
-  playNotificationSound();
-  showDesktopNotification();
+function handleTimerCompletion() {
+  playCompletionSound();
 
-  // Switch session mode
   if (currentMode === 'study') {
+    // Study session finished -> switch to Break Mode
     currentMode = 'break';
     timeLeftSeconds = breakDuration * 60;
+    showDesktopNotification('Study Session Completed!', 'Great job! Time to take a 5-minute break.');
   } else {
+    // Break session finished -> increment counter and switch to Study Mode
     currentMode = 'study';
+    completedSessions++;
+    sessionCount.textContent = completedSessions;
     timeLeftSeconds = studyDuration * 60;
+    showDesktopNotification('Break Time Ended!', 'Break is over. Let\'s get back into focus mode!');
   }
 
-  isRunning = false;
-  timerEndTime = null;
-  
-  saveState();
-  updateUI();
+  // Auto-start next timer cycle automatically
+  isRunning = true;
+  timerEndTime = Date.now() + (timeLeftSeconds * 1000);
+
+  saveStateToStorage();
+  updateFullUI();
+  startTimerCountdown();
 }
 
 /**
- * Save user custom durations and update current timer if idle
+ * Validate user input and save custom durations
  */
 function handleSaveSettings() {
-  const newStudy = parseInt(studyInput.value, 10);
-  const newBreak = parseInt(breakInput.value, 10);
+  const rawStudy = studyInput.value.trim();
+  const rawBreak = breakInput.value.trim();
 
-  // Validation
-  if (isNaN(newStudy) || newStudy < 1 || newStudy > 120) {
-    showStatus('Study time must be 1-120 mins', 'red');
-    return;
-  }
-  if (isNaN(newBreak) || newBreak < 1 || newBreak > 60) {
-    showStatus('Break time must be 1-60 mins', 'red');
+  // 1. Check for empty inputs
+  if (rawStudy === '' || rawBreak === '') {
+    showStatusMessage('Duration values cannot be empty.', 'error');
     return;
   }
 
+  const newStudy = Number(rawStudy);
+  const newBreak = Number(rawBreak);
+
+  // 2. Validate integers and ranges
+  if (!Number.isInteger(newStudy) || newStudy < 1 || newStudy > 120) {
+    showStatusMessage('Study duration must be between 1 and 120 minutes.', 'error');
+    return;
+  }
+
+  if (!Number.isInteger(newBreak) || newBreak < 1 || newBreak > 60) {
+    showStatusMessage('Break duration must be between 1 and 60 minutes.', 'error');
+    return;
+  }
+
+  // Apply validated settings
   studyDuration = newStudy;
   breakDuration = newBreak;
 
-  // If timer is not running, adjust remaining time immediately
+  // If timer is currently paused, update remaining time display immediately
   if (!isRunning) {
     timeLeftSeconds = (currentMode === 'study' ? studyDuration : breakDuration) * 60;
   }
 
-  saveState();
-  updateUI();
-  showStatus('Settings Saved!', '#16a34a');
+  saveStateToStorage();
+  updateFullUI();
+  showStatusMessage('Settings saved successfully!', 'success');
 }
 
 /**
- * Save current state to chrome.storage.local
+ * Reset completed session counter to zero
  */
-function saveState() {
+function handleResetSessionCount() {
+  completedSessions = 0;
+  sessionCount.textContent = completedSessions;
+  saveStateToStorage();
+  showStatusMessage('Session count reset to 0.', 'success');
+}
+
+/**
+ * Synchronize full extension state to chrome.storage.local
+ */
+function saveStateToStorage() {
   chrome.storage.local.set({
     studyDuration: studyDuration,
     breakDuration: breakDuration,
+    completedSessions: completedSessions,
     currentMode: currentMode,
     timeLeftSeconds: timeLeftSeconds,
     isRunning: isRunning,
@@ -216,27 +264,28 @@ function saveState() {
 }
 
 /**
- * Update whole UI elements (display, mode badge, button state)
+ * Master UI update function
  */
-function updateUI() {
-  updateDisplay(timeLeftSeconds);
+function updateFullUI() {
+  updateTimerDisplay(timeLeftSeconds);
   updateModeBadge();
-  updateButtonStates();
+  updateButtonControls();
+  sessionCount.textContent = completedSessions;
 }
 
 /**
- * Format remaining seconds into MM:SS format
+ * Format seconds into MM:SS format
  */
-function updateDisplay(seconds) {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
+function updateTimerDisplay(totalSeconds) {
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
   const formattedMins = String(mins).padStart(2, '0');
   const formattedSecs = String(secs).padStart(2, '0');
   timerDisplay.textContent = `${formattedMins}:${formattedSecs}`;
 }
 
 /**
- * Update the session badge label and CSS styling
+ * Update visual badge for Study vs Break session
  */
 function updateModeBadge() {
   if (currentMode === 'study') {
@@ -249,36 +298,38 @@ function updateModeBadge() {
 }
 
 /**
- * Update enabled/disabled states for start/pause buttons
+ * Toggle Start / Pause button enabled states
  */
-function updateButtonStates() {
+function updateButtonControls() {
   startBtn.disabled = isRunning;
   pauseBtn.disabled = !isRunning;
 }
 
 /**
- * Display status feedback text for settings save
+ * Render status and error messages in UI
  */
-function showStatus(message, color) {
-  saveStatus.textContent = message;
-  saveStatus.style.color = color;
+function showStatusMessage(message, type) {
+  statusMsg.textContent = message;
+  statusMsg.className = `status-msg ${type}`;
+  
   setTimeout(() => {
-    saveStatus.textContent = '';
-  }, 2500);
+    statusMsg.className = 'status-msg hidden';
+    statusMsg.textContent = '';
+  }, 3000);
 }
 
 /**
- * Synthesize a completion chime audio using Web Audio API (Offline compatible)
+ * Synthesize offline completion tone using Web Audio API
  */
-function playNotificationSound() {
+function playCompletionSound() {
   try {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
 
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-    osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3); // A5
+    osc.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5 tone
+    osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3); // A5 tone
 
     gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
@@ -288,21 +339,16 @@ function playNotificationSound() {
 
     osc.start();
     osc.stop(audioCtx.currentTime + 0.5);
-  } catch (e) {
-    console.log('Audio playback not supported or blocked:', e);
+  } catch (err) {
+    console.log('Audio Context playback notice:', err);
   }
 }
 
 /**
- * Display standard Chrome desktop notification when session finishes
+ * Display Chrome Desktop Notification
  */
-function showDesktopNotification() {
+function showDesktopNotification(title, message) {
   if (chrome.notifications) {
-    const title = currentMode === 'study' ? 'Break Time Over!' : 'Study Session Completed!';
-    const message = currentMode === 'study' 
-      ? 'Time to get back into focus mode. Start your study session!' 
-      : 'Great job staying focused! Take a well-deserved break.';
-
     chrome.notifications.create({
       type: 'basic',
       iconUrl: 'icons/icon48.png',

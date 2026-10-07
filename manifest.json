@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Study Timer - Pomodoro Focus Assistant",
+  "name": "Study Timer - Pomodoro Productivity Extension",
   "version": "1.0.0",
-  "description": "A clean, modern Pomodoro study timer Chrome extension designed for students to manage study and break sessions effectively.",
+  "description": "A clean, modern, and customizable Pomodoro study timer designed for students to track focused study sessions and breaks.",
   "permissions": [
     "storage",
     "notifications"
