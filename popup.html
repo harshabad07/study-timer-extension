@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Study Timer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header Section -->
+    <header class="header">
+      <h1 class="app-title">Study Timer</h1>
+      <div id="modeBadge" class="badge mode-study">Study Session</div>
+    </header>
+
+    <!-- Main Digital Clock Card -->
+    <main class="timer-card">
+      <div class="timer-display" id="timerDisplay">25:00</div>
+      
+      <!-- Primary Control Buttons -->
+      <div class="controls">
+        <button id="startBtn" class="btn btn-primary" title="Start Timer">
+          <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+          Start
+        </button>
+        <button id="pauseBtn" class="btn btn-secondary" disabled title="Pause Timer">
+          <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+          Pause
+        </button>
+        <button id="resetBtn" class="btn btn-outline" title="Reset Session">
+          <svg class="icon" viewBox="0 0 24 24"><path fill="currentColor" d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+          Reset
+        </button>
+      </div>
+    </main>
+
+    <!-- Session Settings Accordion / Section -->
+    <section class="settings-card">
+      <h2 class="settings-title">Timer Settings (Minutes)</h2>
+      <div class="settings-grid">
+        <div class="input-group">
+          <label for="studyInput">Study Duration:</label>
+          <input type="number" id="studyInput" min="1" max="120" value="25">
+        </div>
+        <div class="input-group">
+          <label for="breakInput">Break Duration:</label>
+          <input type="number" id="breakInput" min="1" max="60" value="5">
+        </div>
+      </div>
+      <div class="settings-actions">
+        <button id="saveSettingsBtn" class="btn btn-small">Save Settings</button>
+        <span id="saveStatus" class="status-msg"></span>
+      </div>
+    </section>
+
+    <!-- Footer Information -->
+    <footer class="footer">
+      <p>Stay focused & build study discipline!</p>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
